@@ -285,6 +285,73 @@ public class MapperTests : IDisposable
         Assert.Equal("DI [Test]", dto.DisplayName);
     }
 
+    [Fact]
+    public void DI_ConverterWithInjectedService_OverridesConvert()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<IPricingService, FixedDiscountPricingService>();
+        services.AddSingleton<ProductWithPricingConverter>();
+        services.AddMapper((cfg, sp) =>
+        {
+            // withProjectTo: false — Convert() uses injected service, not the expression
+            cfg.CreateMap<Product, ProductDto, ProductWithPricingConverter>(sp, withProjectTo: false);
+        });
+
+        var provider = services.BuildServiceProvider();
+        var mapper = provider.GetRequiredService<IMapper>();
+
+        var dto = mapper.Map<Product, ProductDto>(
+            new Product { Id = 1, Name = "Widget", Category = "HW", Price = 100m });
+
+        Assert.Equal("Widget [HW]", dto.DisplayName);
+        Assert.Equal(90m, dto.Price); // 10% discount applied by service
+    }
+
+    [Fact]
+    public void DI_ConverterWithService_MapAndProjectToBothWork()
+    {
+        // Setup: SQLite in-memory for ProjectTo
+        var dbOptions = new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlite("DataSource=:memory:")
+            .Options;
+        using var db = new TestDbContext(dbOptions);
+        db.Database.OpenConnection();
+        db.Database.EnsureCreated();
+        db.Products.AddRange(
+            new Product { Id = 100, Name = "Alpha", Category = "Cat1", Price = 200m, Tags = [] },
+            new Product { Id = 101, Name = "Beta",  Category = "Cat2", Price = 50m,  Tags = [] }
+        );
+        db.SaveChanges();
+
+        // DI: converter with injected service + withProjectTo: true
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<IPricingService, FixedDiscountPricingService>();
+        services.AddSingleton<ProductWithPricingConverter>();
+        services.AddMapper((cfg, sp) =>
+        {
+            cfg.CreateMap<Product, ProductDto, ProductWithPricingConverter>(sp, withProjectTo: true);
+        });
+        var provider = services.BuildServiceProvider();
+        var mapper = provider.GetRequiredService<IMapper>();
+
+        // Map() — uses overridden Convert() with injected pricing service
+        var dto = mapper.Map<Product, ProductDto>(
+            new Product { Id = 1, Name = "X", Category = "Y", Price = 100m });
+        Assert.Equal(90m, dto.Price); // 10% discount from service
+
+        // ProjectTo() — uses AsExpression(), no discount (raw price)
+        var projected = db.Products
+            .ProjectTo<ProductDto>(mapper)
+            .OrderBy(d => d.Id)
+            .ToList();
+
+        Assert.Equal(2, projected.Count);
+        Assert.Equal("Alpha [Cat1]", projected[0].DisplayName);
+        Assert.Equal(200m, projected[0].Price); // raw price — no service in SQL
+        Assert.Equal("Beta [Cat2]", projected[1].DisplayName);
+        Assert.Equal(50m, projected[1].Price);
+    }
+
     // ── Nested Order Map() tests ─────────────────────────────
 
     [Fact]

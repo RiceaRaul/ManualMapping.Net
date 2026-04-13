@@ -7,6 +7,7 @@ Expression-first object mapper for .NET. Write one C# expression that powers bot
 - **One expression, two uses** — the same `Expression<Func<TSrc, TDest>>` compiles to a delegate for `Map()` and translates to SQL for `ProjectTo()`
 - **Zero reflection at runtime** — typed delegates, no `DynamicInvoke`
 - **Full control** — you write every property mapping, you see exactly what SQL gets generated
+- **DI-friendly** — inject services into converters, override `Convert()` for custom logic
 - **EF Core ProjectTo** — ternaries become `CASE WHEN`, navigation properties become `JOIN`, nested collections become sub-selects
 
 ## Quick Start
@@ -86,6 +87,120 @@ cfg.CreateMap(new ProductConverter());
 
 mapper.Map<Product, ProductDto>(product);    // forward
 mapper.Map<ProductDto, Product>(dto);        // reverse
+```
+
+## Dependency Injection & Virtual Overrides
+
+All methods on converters are virtual — override them to inject services:
+
+| Method | Default | Override to... |
+|---|---|---|
+| `AsExpression()` | abstract — must implement | Define the EF-translatable projection |
+| `Convert()` | Compiles `AsExpression()` | Use injected services for `Map()` |
+| `AsReverseExpression()` | abstract (bidirectional) | Define reverse projection |
+| `ConvertBack()` | Compiles `AsReverseExpression()` | Use injected services for reverse `Map()` |
+
+### Expression only (simple)
+
+No DI needed — `Convert()` is auto-compiled from `AsExpression()`:
+
+```csharp
+public class SimpleConverter : TypeConverter<Product, ProductDto>
+{
+    public override Expression<Func<Product, ProductDto>> AsExpression() =>
+        src => new ProductDto { Id = src.Id, Name = src.Name };
+
+    // Convert() auto-compiled — no override needed
+    // ProjectTo() works
+}
+```
+
+### DI service + ProjectTo (both paths)
+
+Override `Convert()` for in-memory mapping with services, keep `AsExpression()` for SQL:
+
+```csharp
+public class ProductConverter : TypeConverter<Product, ProductDto>
+{
+    private readonly IPricingService _pricing;
+
+    public ProductConverter(IPricingService pricing) => _pricing = pricing;
+
+    // AsExpression() — EF-translatable, used by ProjectTo()
+    public override Expression<Func<Product, ProductDto>> AsExpression() =>
+        src => new ProductDto
+        {
+            Id    = src.Id,
+            Name  = src.Name,
+            Price = src.Price           // raw price in SQL
+        };
+
+    // Convert() — overridden, uses injected service for Map()
+    public override ProductDto Convert(Product source) => new()
+    {
+        Id    = source.Id,
+        Name  = source.Name,
+        Price = _pricing.ApplyDiscount(source.Price)  // discounted in memory
+    };
+}
+```
+
+```csharp
+builder.Services.AddScoped<IPricingService, PricingService>();
+builder.Services.AddScoped<ProductConverter>();
+
+builder.Services.AddMapper((cfg, sp) =>
+{
+    // withProjectTo: true — both Map() and ProjectTo() work
+    cfg.CreateMap<Product, ProductDto, ProductConverter>(sp, withProjectTo: true);
+});
+```
+
+| Call | What runs | Service used |
+|---|---|---|
+| `mapper.Map<Product, ProductDto>(p)` | `Convert()` override | yes |
+| `db.Products.ProjectTo<ProductDto>(mapper)` | `AsExpression()` → SQL | no |
+
+### DI service only (no ProjectTo)
+
+When the expression can't be translated to SQL (e.g. `string.Join`, complex service logic):
+
+```csharp
+cfg.CreateMap<Product, ProductDto, ProductConverter>(sp, withProjectTo: false);
+
+mapper.Map<Product, ProductDto>(product);                    // works — Convert()
+dbContext.Products.ProjectTo<ProductDto>(mapper);             // throws InvalidOperationException
+```
+
+### Bidirectional with DI
+
+Override both directions:
+
+```csharp
+public class UserConverter : BidirectionalConverter<User, UserDto>
+{
+    private readonly IEncryptionService _crypto;
+
+    public UserConverter(IEncryptionService crypto) => _crypto = crypto;
+
+    public override Expression<Func<User, UserDto>> AsExpression() =>
+        src => new UserDto { Id = src.Id, Email = src.Email };
+
+    public override Expression<Func<UserDto, User>> AsReverseExpression() =>
+        src => new User { Id = src.Id, Email = src.Email };
+
+    public override UserDto Convert(User source) => new()
+    {
+        Id    = source.Id,
+        Email = _crypto.Decrypt(source.EncryptedEmail)
+    };
+
+    public override User ConvertBack(UserDto source) => new()
+    {
+        Id             = source.Id,
+        EncryptedEmail = _crypto.Encrypt(source.Email)
+    };
+}
 ```
 
 ## Simple vs Complex Mappings

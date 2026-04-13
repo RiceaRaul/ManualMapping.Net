@@ -12,5 +12,10 @@ public abstract class BidirectionalConverter<TSrc, TDest>
         => _compiledReverse = new Lazy<Func<TDest, TSrc>>(() => AsReverseExpression().Compile());
 
     public abstract Expression<Func<TDest, TSrc>> AsReverseExpression();
-    public TSrc ConvertBack(TDest source) => _compiledReverse.Value(source);
+
+    /// <summary>
+    /// Override this to use injected services in the reverse mapping logic.
+    /// By default, compiles and invokes AsReverseExpression().
+    /// </summary>
+    public virtual TSrc ConvertBack(TDest source) => _compiledReverse.Value(source);
 }

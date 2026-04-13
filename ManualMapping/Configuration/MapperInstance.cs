@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Linq.Expressions;
 using ManualMapping.Abstractions;
 
@@ -5,21 +6,22 @@ namespace ManualMapping.Configuration;
 
 internal sealed class MapperInstance : IMapper
 {
-    private readonly Dictionary<(Type, Type), Func<object, object>> _untypedDelegates;
-    private readonly Dictionary<(Type, Type), Delegate>             _typedDelegates;
-    private readonly Dictionary<(Type, Type), LambdaExpression>     _expressions;
+    private readonly FrozenDictionary<(Type, Type), Func<object, object>> _untypedDelegates;
+    private readonly FrozenDictionary<(Type, Type), Delegate>             _typedDelegates;
+    private readonly FrozenDictionary<(Type, Type), LambdaExpression>     _expressions;
+
 
     internal MapperInstance(
         Dictionary<(Type, Type), Func<object, object>> untypedDelegates,
         Dictionary<(Type, Type), Delegate>             typedDelegates,
         Dictionary<(Type, Type), LambdaExpression>     expressions)
     {
-        _untypedDelegates = untypedDelegates;
-        _typedDelegates   = typedDelegates;
-        _expressions      = expressions;
+        _untypedDelegates = untypedDelegates.ToFrozenDictionary();
+        _typedDelegates   = typedDelegates.ToFrozenDictionary();
+        _expressions      = expressions.ToFrozenDictionary();
     }
 
-    // ── Typed path: zero boxing ──────────────────────────────
+    // ── Typed path: zero boxing, cached resolve ──────────────
 
     public TDest Map<TSrc, TDest>(TSrc source)
     {
@@ -54,6 +56,7 @@ internal sealed class MapperInstance : IMapper
 
         return (TDest)ResolveUntyped((source.GetType(), typeof(TDest)), source);
     }
+
 
     private object ResolveUntyped(in (Type, Type) key, object source)
     {
