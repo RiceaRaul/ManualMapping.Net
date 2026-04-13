@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ManualMapping.Benchmarks/ManualMapping.Benchmarks.csproj" />
+  <Project Path="ManualMapping.Tests/ManualMapping.Tests.csproj" />
+  <Project Path="ManualMapping/ManualMapping.csproj" />
+</Solution>

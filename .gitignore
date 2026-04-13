@@ -1,0 +1,20 @@
+## .NET
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+
+## IDE
+.idea/
+.vs/
+*.sln.DotSettings.user
+
+## BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+## OS
+.DS_Store
+Thumbs.db
