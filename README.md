@@ -280,6 +280,12 @@ ManualMapping.Tests/        xUnit + EF Core SQLite
 ManualMapping.Benchmarks/   BenchmarkDotNet vs AutoMapper
 ```
 
+## Support
+
+If you find this project useful, consider supporting its development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ricearaul)
+
 ## License
 
 MIT
