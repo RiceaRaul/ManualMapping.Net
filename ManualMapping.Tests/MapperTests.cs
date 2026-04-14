@@ -15,6 +15,7 @@ public class MapperTests : IDisposable
     private readonly IMapper _simpleMapper;
     private readonly IMapper _complexMapper;
     private readonly IMapper _orderMapper;
+    private readonly IMapper _autoMapper;
 
     public MapperTests()
     {
@@ -80,6 +81,11 @@ public class MapperTests : IDisposable
         orderCfg.CreateMap(new OrderConverter(), withProjectTo: true);
         orderCfg.CreateMap(new OrderLineConverter(), withProjectTo: true);
         _orderMapper = orderCfg.Build();
+
+        // Auto mapper — reflection-based auto + per-field custom overrides
+        var autoCfg = new MapperConfiguration();
+        autoCfg.CreateMap(new ProductAutoConverter(), withProjectTo: true);
+        _autoMapper = autoCfg.Build();
     }
 
     public void Dispose()
@@ -436,6 +442,62 @@ public class MapperTests : IDisposable
         Assert.Equal("John Doe", dto.CustomerFullName);
         Assert.Equal("Springfield", dto.CustomerCity);
         Assert.Equal(new DateTime(2025, 6, 15), dto.OrderDate);
+    }
+
+    // ── Auto-mapping converter tests ─────────────────────────
+
+    [Fact]
+    public void AutoConverter_AutoMapsMatchingFields_AppliesCustom()
+    {
+        var product = new Product { Id = 7, Name = "Widget", Category = "HW", Price = 12.50m };
+        var dto = _autoMapper.Map<Product, ProductDto>(product);
+
+        // Id + Price auto-mapped by reflection
+        Assert.Equal(7, dto.Id);
+        Assert.Equal(12.50m, dto.Price);
+
+        // Custom binding wins
+        Assert.Equal("Widget [HW]", dto.DisplayName);
+
+        // No matching source prop → left as default
+        Assert.Equal("", dto.TagsSummary);
+    }
+
+    [Fact]
+    public void AutoConverter_Reverse_AutoMapsMatchingFields_AppliesCustom()
+    {
+        var dto = new ProductDto { Id = 42, DisplayName = "ReverseName", Price = 3.14m };
+        var product = _autoMapper.Map<ProductDto, Product>(dto);
+
+        // Auto-mapped: Id, Price
+        Assert.Equal(42, product.Id);
+        Assert.Equal(3.14m, product.Price);
+
+        // Custom reverse
+        Assert.Equal("ReverseName", product.Name);
+    }
+
+    [Fact]
+    public void AutoConverter_ProjectTo_TranslatesToSql()
+    {
+        var sql = _db.Products
+            .ProjectTo<ProductDto>(_autoMapper)
+            .ToQueryString();
+
+        // Auto-mapped + custom fields must appear as individual columns (not SELECT *)
+        Assert.DoesNotContain("SELECT *", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Id\"", sql);
+        Assert.Contains("\"Price\"", sql);
+        Assert.Contains("AS \"DisplayName\"", sql);
+
+        var dtos = _db.Products
+            .ProjectTo<ProductDto>(_autoMapper)
+            .OrderBy(d => d.Id)
+            .ToList();
+
+        Assert.Equal(5, dtos.Count);
+        Assert.Equal("Widget [Hardware]", dtos[0].DisplayName);
+        Assert.Equal(9.99m, dtos[0].Price);
     }
 
     [Fact]
