@@ -26,16 +26,20 @@ internal sealed class MapperInstance : IMapper
     public TDest Map<TSrc, TDest>(TSrc source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return ResolveTyped<TSrc, TDest>()(source);
-    }
 
-    private Func<TSrc, TDest> ResolveTyped<TSrc, TDest>()
-    {
         var key = (typeof(TSrc), typeof(TDest));
-        if (!_typedDelegates.TryGetValue(key, out var del))
-            throw new InvalidOperationException(
-                $"No map registered for {key.Item1.Name} → {key.Item2.Name}.");
-        return (Func<TSrc, TDest>)del;
+        if (_typedDelegates.TryGetValue(key, out var del))
+            return ((Func<TSrc, TDest>)del)(source);
+
+        if (source is System.Collections.IEnumerable enumerable
+            && TryGetEnumerableElementType(typeof(TSrc), out var srcElem)
+            && TryGetEnumerableElementType(typeof(TDest), out var destElem))
+        {
+            return (TDest)ResolveCollection(srcElem, destElem, typeof(TDest), enumerable);
+        }
+
+        throw new InvalidOperationException(
+            $"No map registered for {typeof(TSrc).Name} → {typeof(TDest).Name}.");
     }
 
     // ── Untyped path: Map<TDest>(object) + collection detection ─

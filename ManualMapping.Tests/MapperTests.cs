@@ -168,6 +168,73 @@ public class MapperTests : IDisposable
         Assert.Equal("A [X]", dtos[0].DisplayName);
     }
 
+    // ── Typed collection mapping: Map<TSrc, TDest> with collection types ────
+
+    [Fact]
+    public void Map_TypedCollection_IEnumerableToIEnumerable()
+    {
+        var products = new List<Product>
+        {
+            new() { Id = 1, Name = "A", Category = "X", Price = 1m },
+            new() { Id = 2, Name = "B", Category = "Y", Price = 2m },
+        };
+
+        var dtos = _simpleMapper.Map<IEnumerable<Product>, IEnumerable<ProductDto>>(products);
+
+        var list = dtos.ToList();
+        Assert.Equal(2, list.Count);
+        Assert.Equal("A [X]", list[0].DisplayName);
+        Assert.Equal("B [Y]", list[1].DisplayName);
+    }
+
+    [Fact]
+    public void Map_TypedCollection_ListToList()
+    {
+        var products = new List<Product>
+        {
+            new() { Id = 1, Name = "A", Category = "X", Price = 1m },
+            new() { Id = 2, Name = "B", Category = "Y", Price = 2m },
+            new() { Id = 3, Name = "C", Category = "Z", Price = 3m },
+        };
+
+        var dtos = _simpleMapper.Map<List<Product>, List<ProductDto>>(products);
+
+        Assert.IsType<List<ProductDto>>(dtos);
+        Assert.Equal(3, dtos.Count);
+        Assert.Equal("B [Y]", dtos[1].DisplayName);
+    }
+
+    [Fact]
+    public void Map_TypedCollection_ArrayToArray()
+    {
+        var products = new Product[]
+        {
+            new() { Id = 1, Name = "A", Category = "X", Price = 1m },
+        };
+
+        var dtos = _simpleMapper.Map<Product[], ProductDto[]>(products);
+
+        Assert.IsType<ProductDto[]>(dtos);
+        Assert.Single(dtos);
+        Assert.Equal("A [X]", dtos[0].DisplayName);
+    }
+
+    [Fact]
+    public void Map_TypedCollection_EmptyList()
+    {
+        var dtos = _simpleMapper.Map<List<Product>, List<ProductDto>>(new List<Product>());
+
+        Assert.Empty(dtos);
+    }
+
+    [Fact]
+    public void Map_TypedCollection_ThrowsOnUnregisteredElement()
+    {
+        var items = new List<ProductDto> { new() };
+        Assert.Throws<InvalidOperationException>(() =>
+            _simpleMapper.Map<List<ProductDto>, List<string>>(items));
+    }
+
     [Fact]
     public void Map_ComplexConverter_IncludesTagsSummary()
     {
