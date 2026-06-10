@@ -20,13 +20,17 @@ public abstract class AutoTypeConverter<TSrc, TDest> : TypeConverter<TSrc, TDest
 
     protected AutoTypeConverter()
         => _built = new Lazy<Expression<Func<TSrc, TDest>>>(
-            () => AutoMapExpressionBuilder.Build<TSrc, TDest>(CustomExpression()));
+            () => AutoMapExpressionBuilder.Build<TSrc, TDest>(
+                CustomExpression(),
+                IgnoredProperties().ToHashSet(StringComparer.Ordinal) is { Count: > 0 } s ? s : null));
 
     /// <summary>
     /// Override to bind fields that cannot be auto-mapped.
     /// Any property not bound here is auto-mapped from a same-named,
     /// assignment-compatible source property.
     /// </summary>
+    protected virtual IEnumerable<string> IgnoredProperties() => [];
+
     protected virtual Expression<Func<TSrc, TDest>>? CustomExpression() => null;
 
     public sealed override Expression<Func<TSrc, TDest>> AsExpression() => _built.Value;

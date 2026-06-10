@@ -591,4 +591,71 @@ public class MapperTests : IDisposable
         Assert.Equal(15.00m, sensor.UnitPrice);
         Assert.Equal(30.00m, sensor.LineTotal);
     }
+
+    // ── IgnoredProperties / IgnoredReverseProperties ──────────────────────────
+
+    [Fact]
+    public void AutoConverter_IgnoredProperties_SkipsIgnoredPropOnForward()
+    {
+        var cfg = new MapperConfiguration();
+        cfg.CreateMap(new ProductIgnoreConverter(), withProjectTo: false);
+        var mapper = cfg.Build();
+
+        var product = new Product { Id = 7, Name = "Widget", Price = 12.50m };
+        var dto = mapper.Map<Product, ProductDto>(product);
+
+        Assert.Equal(7, dto.Id);          // non-ignored — still maps
+        Assert.Equal(0m, dto.Price);      // ignored — stays at default
+    }
+
+    [Fact]
+    public void AutoConverter_IgnoredProperties_EmptyList_MapsAll()
+    {
+        // Baseline: no ignored properties → both Id and Price auto-map
+        var cfg = new MapperConfiguration();
+        cfg.CreateMap(new ProductAutoConverter(), withProjectTo: false);
+        var mapper = cfg.Build();
+
+        var product = new Product { Id = 3, Price = 5.00m };
+        var dto = mapper.Map<Product, ProductDto>(product);
+
+        Assert.Equal(3, dto.Id);
+        Assert.Equal(5.00m, dto.Price);
+    }
+
+    [Fact]
+    public void AutoBiConverter_IgnoredProperties_ForwardSkipsIgnored_ReverseUnaffected()
+    {
+        var cfg = new MapperConfiguration();
+        cfg.CreateMap(new ProductIgnoreBiConverter(), withProjectTo: false);
+        var mapper = cfg.Build();
+
+        var product = new Product { Id = 9, Price = 20.00m };
+
+        // Forward: Price ignored
+        var dto = mapper.Map<Product, ProductDto>(product);
+        Assert.Equal(9, dto.Id);
+        Assert.Equal(0m, dto.Price);
+
+        // Reverse: Price NOT in IgnoredReverseProperties → maps fine
+        var roundTrip = mapper.Map<ProductDto, Product>(new ProductDto { Id = 1, Price = 99.99m });
+        Assert.Equal(99.99m, roundTrip.Price);
+    }
+
+    [Fact]
+    public void AutoBiConverter_IgnoredReverseProperties_ReverseSkipsIgnored_ForwardUnaffected()
+    {
+        var cfg = new MapperConfiguration();
+        cfg.CreateMap(new ProductIgnoreBiConverter(), withProjectTo: false);
+        var mapper = cfg.Build();
+
+        // Reverse: Id in IgnoredReverseProperties → stays 0
+        var product = mapper.Map<ProductDto, Product>(new ProductDto { Id = 42, Price = 7.00m });
+        Assert.Equal(0, product.Id);
+        Assert.Equal(7.00m, product.Price);
+
+        // Forward: Id NOT in IgnoredProperties → maps fine
+        var dto = mapper.Map<Product, ProductDto>(new Product { Id = 42, Price = 7.00m });
+        Assert.Equal(42, dto.Id);
+    }
 }

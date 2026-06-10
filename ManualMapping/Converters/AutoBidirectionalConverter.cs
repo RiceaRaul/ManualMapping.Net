@@ -21,7 +21,9 @@ public abstract class AutoBidirectionalConverter<TSrc, TDest>
     protected AutoBidirectionalConverter()
     {
         _builtReverse = new Lazy<Expression<Func<TDest, TSrc>>>(
-            () => AutoMapExpressionBuilder.Build<TDest, TSrc>(CustomReverseExpression()));
+            () => AutoMapExpressionBuilder.Build<TDest, TSrc>(
+                CustomReverseExpression(),
+                IgnoredReverseProperties().ToHashSet(StringComparer.Ordinal) is { Count: > 0 } s ? s : null));
         _compiledReverse = new Lazy<Func<TDest, TSrc>>(() => AsReverseExpression().Compile());
     }
 
@@ -30,6 +32,8 @@ public abstract class AutoBidirectionalConverter<TSrc, TDest>
     /// direction. Any property not bound here is auto-mapped from a
     /// same-named, assignment-compatible destination property.
     /// </summary>
+    protected virtual IEnumerable<string> IgnoredReverseProperties() => [];
+
     protected virtual Expression<Func<TDest, TSrc>>? CustomReverseExpression() => null;
 
     public Expression<Func<TDest, TSrc>> AsReverseExpression() => _builtReverse.Value;

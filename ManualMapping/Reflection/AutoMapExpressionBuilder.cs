@@ -13,7 +13,8 @@ namespace ManualMapping.Reflection;
 internal static class AutoMapExpressionBuilder
 {
     public static Expression<Func<TSrc, TDest>> Build<TSrc, TDest>(
-        Expression<Func<TSrc, TDest>>? customExpression)
+        Expression<Func<TSrc, TDest>>? customExpression,
+        IReadOnlySet<string>? ignoredProperties = null)
     {
         ParameterExpression srcParam;
         List<MemberBinding> bindings;
@@ -49,6 +50,7 @@ internal static class AutoMapExpressionBuilder
         {
             if (!destProp.CanWrite) continue;
             if (explicitlyMapped.Contains(destProp.Name)) continue;
+            if (ignoredProperties is not null && ignoredProperties.Contains(destProp.Name)) continue;
 
             var srcProp = Array.Find(srcProps, p => p.Name == destProp.Name);
             if (srcProp is null || !srcProp.CanRead) continue;
